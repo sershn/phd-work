@@ -1,11 +1,21 @@
+import itertools
+import datetime
+import gantt
+import math
+import random
+import pandas as pd
+import numpy as np
+import pyprind
+
 number_of_MC_runs = 100000
-method_mode = 2 # "0" for Monte Carlo
+method_mode = 0 # "0" for Monte Carlo
          # "1" for Enumerated
          # "2" for Deterministic
 TW_mode = 1 # "0" for Deterministic TW
             # "1" for Stochastic TW
 data_mode = 1 # "0" for short memory
               # "1" for long memory
+
 # EMPTY LISTS FOR DATA MANAGEMENT
 a1_alternative_list, a1_duration_list, a1_cost_list, a1_crews_list = [], [], [], []
 a2_alternative_list, a2_duration_list, a2_cost_list, a2_crews_list = [], [], [], []
@@ -28,25 +38,17 @@ tw0_sp_list, tw1_sp_list, tw3_sp_list, tw4_sp_list = [], [], [], []
 work_duration_list = []
 total_cost_list = []
 schedules_to_print = 9
-import itertools
-import datetime
-import gantt
-import math
-import random
-import pandas as pd
-import numpy as np
-import pyprind
 pd.set_option('display.max_columns', None)
+
 # Formatting
 gantt.define_font_attributes(fill='black',
                              stroke='black',
                              stroke_width=0,
                              font_family="Verdana")
-
 gantt.define_not_worked_days([])  # list_of_days -- list of integer (0: Monday ... 6: Sunday) - default [5, 6]
+
 # CREWS
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-'''Berm and abutment base'''
+# Berm and abutment base
 # Excavate (p. 603, added 15% to cost for loading onto trucks)
 # [output/hr BCY, cost $/hr, workers, equipment weight lb, excavator capacity, CAT model]
 B12B = [125, 316, 2, 49600, '1.5 CY', '320 4F excavator']  # line 31 23 16.42 0250
@@ -70,8 +72,7 @@ a1_alternatives = [a1_alternative_0, a1_alternative_1, a1_alternative_2]
 a9_alternatives = [a1_alternative_0, a1_alternative_1, a1_alternative_2]
 a10_alternatives = [a1_alternative_0, a1_alternative_1, a1_alternative_2]
 a14_alternatives = [a1_alternative_0, a1_alternative_1, a1_alternative_2]
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-'''Abutment base (berm crews plus compaction crew)'''
+# Abutment base (berm crews plus compaction crew)
 # Compact
 # [output/hr CCY, cost $/hr, workers, total equipment weight lb]
 B10G = [162.5, 269.9, 1.5, 49652, '815 sheep-foot roller'] # line 32 23 23.24 0300 (p. 619)
@@ -81,8 +82,7 @@ a4_alternative_1 = [B12C, B34F, B10B, B10G]
 a4_alternative_2 = [B12D, B34G, B10X, B10G]
 a4_alternatives = [a4_alternative_0, a4_alternative_1, a4_alternative_2]
 a7_alternatives = [a4_alternative_0, a4_alternative_1, a4_alternative_2]
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-'''Piles'''
+# Piles
 # Driven prestressed, precast concrete piles 50' long, 12" diameter, 2-3/8" wall
 # [output/hr VLF, cost $/hr, workers, total equipment weight: 1 crawler crane 40 ton, 1 lead 90' high, 1 diesel hammer 22k ft-lb]
 B19_CONCRETE = [90, 827, 8, 96000+8055, 'SCC400TB 40 Ton crane, I-12V2 diesel hummer with lead'] # line 31 62 13.23 2200 (p.624)
@@ -103,8 +103,7 @@ a2_alternative_1 = [B48_CAST_IN, CARMIX_3500]
 a2_alternative_2 = [B19_STEEL]
 a2_alternatives = [a2_alternative_0, a2_alternative_1, a2_alternative_2]
 a11_alternatives = [a2_alternative_0, a2_alternative_1, a2_alternative_2]
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-'''Cast-in-place pier and abutment'''
+# Cast-in-place pier and abutment
 # Pile cap and pier wall
 # [output/hr CY, cost $/hr, workers, total pump weight lb, pump output 45 CY/hr]
 C14A = [2.91, 1287, 25, 7300, 'Schwing SP 500 concrete pump']
@@ -129,8 +128,7 @@ a5_alternative_2 = [C2, C4A_x8, C7, CARMIX_3500]
 a5_alternatives = [a5_alternative_0, a5_alternative_1, a5_alternative_2]
 a8_alternatives = [a5_alternative_0, a5_alternative_1, a5_alternative_2]
 a12_alternatives = [a5_alternative_0, a5_alternative_1, a5_alternative_2]
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-'''Girder installation'''
+# Girder installation
 # Crane method
 # [output/hr Ton, cost $/hr, workers, total crane weight lb]
 E5 = [1.61, 1101, 10, 115919, 'TEREX RT 100 90 ton crane']
@@ -142,8 +140,7 @@ E6 = [1.26, 1653 + 125, 16, 30000 + 115919, 'TEREX RT 100 90 ton crane'] # added
 a6_alternative_0 = [E5]
 a6_alternative_1 = [E6]
 a6_alternatives = [a6_alternative_0, a6_alternative_1]
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-'''Cast-in-place pier and abutment'''
+# Cast-in-place pier and abutment
 # [output/hr SF, cost $/hr, workers, equipment weight]
 C14F = [342, 568, 9, 0,] # line 03 30 53.4900 (p. 89)
 C4A_x5 = list(np.array(C4A) * 5) # 5 number of C4A crews
@@ -153,7 +150,7 @@ C2_x6 = list(np.array(C2) * 6) # 6 number of C2 crews
 a15_alternative_0 = [C2_x3, C4A_x5, C14F, CARMIX_3500]
 a15_alternative_1 = [C2_x6, C4A_x10, C14F, CARMIX_3500]
 a15_alternatives = [a15_alternative_0, a15_alternative_1]
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
 # NOTES
 # Cost of moving equipment from Hay River to Tulita by Winter road (max speed - 50km/hr, distance 900 km, total of 4.5 days there and back assuming 8 hr/day travel time)
 mobilize_duration = 4.5
@@ -161,7 +158,7 @@ B34N_cost = 1084.52 # $/hr
 B34K_cost = 1516.82 # $/hr
 # Ticket from Hay River to Tulita one way - $1255 (Hay River - Yellowknife - Tulita)
 air_ticket_cost = 1255
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
 # SIMULATION SETTINGS
 alt_3 = [0,1,2]
 alt_2 = [0,1]
@@ -197,26 +194,25 @@ a15_r1, a15_o1, a15_r2, a15_o2, a15_r3, a15_o3 = 0,0,0,0,0,0
 
 for iter in range(number_of_runs):
     bar.update()  # progress update
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-    '''TIME-WINDOWS'''
+    # TIME-WINDOWS
     if TW_mode == 0:
         tw0_start = datetime.date(2022, 12, 21)
         tw0_stop = datetime.date(2023, 3, 31)
         # TIME-WINDOW TEMPERATURE ABOVE ZERO 2023
         tw1_start = datetime.date(2023, 4, 28)
         tw1_stop = datetime.date(2023, 10, 5)
-        ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
         # TIME-WINDOW IN-RIVER ACTIVITY 2023
         tw2_start = datetime.date(2023, 7, 16)
         tw2_stop = datetime.date(2023, 9, 14)
         # TIME-WINDOW WINTER ROAD 2023-2024
         tw3_start = datetime.date(2023, 12, 21)
         tw3_stop = datetime.date(2024, 3, 31)
-        ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
         # TIME-WINDOW TEMPERATURE ABOVE ZERO 2024
         tw4_start = datetime.date(2024, 4, 28)
         tw4_stop = datetime.date(2024, 10, 5)
-        ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
         # TIME-WINDOW IN-RIVER ACTIVITY 2024
         tw5_start = datetime.date(2024, 7, 16)
         tw5_stop = datetime.date(2024, 9, 14)
@@ -238,14 +234,14 @@ for iter in range(number_of_runs):
         if sampled_day <= 31: day = sampled_day; month = 3; year = 2023
         else: day = sampled_day - 31; month = 4; year = 2023
         tw0_stop = datetime.date(year, month, day)
-        ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
         # TIME-WINDOW TEMPERATURE ABOVE ZERO 2023
         # start (gamma)
         kay = 20.63; beta = 3.40
         while True:
             sampled_day = int(np.random.gamma(kay, beta))
             while sampled_day <= 0 or sampled_day > 61:
-                sampled_day = int(np.random.logistic(loc, scale))
+                sampled_day = int(np.random.gamma(kay, beta))
             if sampled_day <= 30:
                 day = sampled_day; month = 4; year = 2023
             else:
@@ -262,11 +258,11 @@ for iter in range(number_of_runs):
         else:
             day = sampled_day - 30; month = 10; year = 2023
         tw1_stop = datetime.date(year, month, day)
-        ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
         # TIME-WINDOW IN-RIVER ACTIVITY 2023
         tw2_start = datetime.date(2023, 7, 16)
         tw2_stop = datetime.date(2023, 9, 14)
-        ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
         # TIME-WINDOW WINTER ROAD 2023-2024
         # start (logistic)
         loc = 20.63; scale = 3.40
@@ -288,7 +284,7 @@ for iter in range(number_of_runs):
         else:
             day = sampled_day - 31; month = 4; year = 2024
         tw3_stop = datetime.date(year, month, day)
-        ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
         # TIME-WINDOW TEMPERATURE ABOVE ZERO 2024
         # start (gamma)
         kay = 20.63; beta = 3.40
@@ -312,7 +308,7 @@ for iter in range(number_of_runs):
         else:
             day = sampled_day - 30; month = 10; year = 2024
         tw4_stop = datetime.date(year, month, day)
-        ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
         # TIME-WINDOW IN-RIVER ACTIVITY 2024
         tw5_start = datetime.date(2024, 7, 16)
         tw5_stop = datetime.date(2024, 9, 14)
@@ -369,12 +365,12 @@ for iter in range(number_of_runs):
         a12_x = 0
         a14_x = 0
         a15_x = 0
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # MOBILIZE JOB SITE
     a0_start = tw0_start
     a0_stop = None
     a0_duration = random.randint(30,30)#tw0_2023_duration.days/2
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # BUILD BERM 1
     a1_working_hours = 8
     a1_quantity = 88752  # BCY
@@ -398,7 +394,7 @@ for iter in range(number_of_runs):
     a1_cost = a1_crews * a1_duration * a1_working_hours * a1_hourly_cost + a1_ticket_cost + a1_weight_cost
     a1_start = a0_start + datetime.timedelta(a0_duration)
     a1_stop = None
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # INSTALL PILES 1
     a2_working_hours = 8
     a2_quantity = 6200  # VLF (64 piles x 50')
@@ -427,7 +423,7 @@ for iter in range(number_of_runs):
     a2_cost = a2_crews * a2_duration * a2_working_hours * a2_hourly_cost + a2_ticket_cost + a2_weight_cost
     a2_start = tw0_stop
     a2_stop = None
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # CAST-IN-PLACE PIERS 1
     a3_working_hours = 8
     a3_quantity = 2*1674.18  # CY
@@ -461,7 +457,7 @@ for iter in range(number_of_runs):
     a3_cost = a3_crews * a3_duration * a3_working_hours * a3_hourly_cost + a3_ticket_cost + a3_weight_cost
     a3_start = tw1_start
     a3_stop = None
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # ABUTMENT BASE 1
     a4_working_hours = 8
     a4_quantity = 20631  # BCY
@@ -487,7 +483,7 @@ for iter in range(number_of_runs):
     a4_cost = a1_crews * a4_duration * a4_working_hours * a4_hourly_cost + a4_ticket_cost + a4_weight_cost
     a4_start = tw1_start
     a4_stop = a4_start + datetime.timedelta(a4_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # CAST-IN-PLACE ABUTMENT 1
     a5_working_hours = 8
     a5_quantity = 978.21  # CY
@@ -521,17 +517,17 @@ for iter in range(number_of_runs):
     a5_cost = a5_crews * a5_duration * a5_working_hours * a5_hourly_cost + a5_ticket_cost + a5_weight_cost
     a5_start = a4_start + datetime.timedelta(a4_duration)
     a5_stop = a5_start + datetime.timedelta(a5_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # INSTALL GIRDERS 1
     a6_working_hours = 8
     if a6_x == 0:
         a6_quantity = 1296 # Imperial ton (half of the bridge)
         a6_crews = 2 # Need minimum 2 crews to install girders with cranes
-        a6_name = 'a6_install_girders_depends_of_[a3, a5]'
+        a6_name = 'a6_install_girders_depends_on_[a3, a5]'
     else:
         a6_quantity = 1296 * 2 # Full bridge in case of incremental launching
         a6_crews = 1
-        a6_name = 'a6_install_girders_start_depends_of_[a3, a5]_stop_depends_of_[8, 12]'
+        a6_name = 'a6_install_girders_start_depends_on_[a3, a5]_stop_depends_on_[8, 12]'
     a6_productivity = a6_alternatives[a6_x][0][0]
     a6_hourly_cost = 0
     for i in range(len(a6_alternatives[a6_x])):
@@ -550,7 +546,7 @@ for iter in range(number_of_runs):
     a6_cost = a6_crews * a6_duration * a6_working_hours * a6_hourly_cost + a6_ticket_cost + a6_weight_cost
     a6_start = None
     a6_stop = None
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # ABUTMENT BASE 2
     a7_working_hours = 8
     a7_quantity = 20631  # BCY
@@ -587,7 +583,7 @@ for iter in range(number_of_runs):
     a7_cost = a1_crews * a7_duration * a7_working_hours * a7_hourly_cost + a7_ticket_cost + a7_weight_cost
     a7_start = a5_stop
     a7_stop = a7_start + datetime.timedelta(a7_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # CAST-IN-PLACE ABUTMENT 1
     a8_working_hours = 8
     a8_quantity = 978.21  # CY
@@ -627,16 +623,16 @@ for iter in range(number_of_runs):
     a8_cost = a8_crews * a8_duration * a8_working_hours * a8_hourly_cost + a8_ticket_cost + a8_weight_cost
     a8_start = a7_stop
     a8_stop = a8_start + datetime.timedelta(a8_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # REMOVE BERM 1
     a9_working_hours = 8
     a9_quantity = 88752  # BCY
     if a6_x == 1:  # In case of incremental launching
-        a9_name = 'a9_remove_berm_depends_of_[a3]'
-        a9_allowable_duration = tw2_duration.days/2
+        a9_name = 'a9_remove_berm_depends_on_[a3]'
+        a9_allowable_duration = tw2_duration.days/3 # should be divided by 2 but dividing by 3 because often there is not enough time for activities a11 and a12
         a9_start = tw2_start
     else:
-        a9_name = 'a9_remove_berm_depends_of_[a6]'
+        a9_name = 'a9_remove_berm_depends_on_[a6]'
         a9_allowable_duration = tw3_duration.days/2
         a9_start = tw3_start
     a9_productivity = min(a9_alternatives[a9_x][0][0], a9_alternatives[a9_x][2][0])
@@ -661,11 +657,11 @@ for iter in range(number_of_runs):
         a9_weight_cost = mobilize_duration * B34K_cost * math.ceil(a9_equip_weight / 150000)
     a9_cost = a9_crews * a9_duration * a9_working_hours * a9_hourly_cost + a9_ticket_cost + a9_weight_cost
     a9_stop = a9_start + datetime.timedelta(a9_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # BUILD BERM 2
     a10_working_hours = 8
     a10_quantity = 88752  # BCY
-    if a6_x == 1: a10_allowable_duration = tw2_duration.days - a7_duration # In case of incremental launching
+    if a6_x == 1: a10_allowable_duration = tw2_duration.days/3# should be - a9_duration but dividing by 3 to allovefor a11 and a12 to happen (In case of incremental launching)
     else: a10_allowable_duration = tw3_duration.days - a9_duration
     a10_productivity = min(a10_alternatives[a10_x][0][0], a10_alternatives[a10_x][2][0])
     a10_truck_crews = math.ceil(a10_productivity / (a10_alternatives[a10_x][1][0] / 1.25))  # 1.25 - bank to loose conversion factor
@@ -690,11 +686,11 @@ for iter in range(number_of_runs):
     a10_cost = a10_crews * a10_duration * a10_working_hours * a10_hourly_cost + a10_ticket_cost + a10_weight_cost
     a10_start = a9_stop
     a10_stop = a10_start + datetime.timedelta(a10_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # INSTALL PILES 2
     a11_working_hours = 8
     a11_quantity = 6200  # VLF (64 piles x 50')
-    if a6_x == 1: a11_allowable_duration = (tw3_stop - a10_stop).days # In case of incremental launching
+    if a6_x == 1: a11_allowable_duration = (tw1_stop - a10_stop).days/2 # In case of incremental launching
     else: a11_allowable_duration = (tw5_start - a10_stop).days
     a11_productivity = a11_alternatives[a11_x][0][0]
     a11_hourly_cost = 0
@@ -723,7 +719,7 @@ for iter in range(number_of_runs):
     a11_cost = a11_crews * a11_duration * a11_working_hours * a11_hourly_cost + a11_ticket_cost + a11_weight_cost
     a11_start = a10_stop
     a11_stop = a11_start + datetime.timedelta(a11_duration)
-    # CAST-IN-PLACE PIERS 1
+    # CAST-IN-PLACE PIERS 2
     a12_working_hours = 8
     a12_quantity = 2 * 1674.18  # CY
     a12_quantity_SFCA = 2 * 10979.19  # SFCA
@@ -732,7 +728,7 @@ for iter in range(number_of_runs):
         a12_allowable_duration = (tw5_start - tw4_start).days/2
         a12_start = tw4_start
     else:
-        a12_allowable_duration = (tw3_start - a11_stop).days
+        a12_allowable_duration = (tw1_stop - a11_stop).days
         a12_start = a11_stop
     # Productivity
     if len(a12_alternatives[a12_x]) == 2:
@@ -766,7 +762,7 @@ for iter in range(number_of_runs):
         a12_weight_cost = mobilize_duration * B34K_cost * math.ceil(a12_equip_weight / 150000)
     a12_cost = a12_crews * a12_duration * a12_working_hours * a12_hourly_cost + a12_ticket_cost + a12_weight_cost
     a12_stop = a12_start + datetime.timedelta(a12_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # INSTALL GIRDERS 1
     a13_working_hours = 8
     if a6_x == 0:
@@ -781,7 +777,7 @@ for iter in range(number_of_runs):
         else:
             a13_crews = math.ceil(a13_initial_duration / a13_allowable_duration)
             a13_duration = math.ceil(a13_quantity / a13_productivity / a13_working_hours / a13_crews)
-        a13_name = 'a13_install_girders_depends_of_[8, 12]'
+        a13_name = 'a13_install_girders_depends_on_[8, 12]'
         a13_hourly_cost = 0
         for i in range(len(a6_alternatives[a6_x])):
             a13_hourly_cost += a6_alternatives[a6_x][i][1]
@@ -804,7 +800,7 @@ for iter in range(number_of_runs):
         a13_stop = a13_start + datetime.timedelta(a13_duration)
     else:
         a13_duration, a13_cost, a13_productivity, a13_crews, a13_x, a13_ppl = 0, 0, 0, 0, 1, 0
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # REMOVE BERM 2
     a14_working_hours = 8
     a14_quantity = 88752  # BCY
@@ -842,8 +838,8 @@ for iter in range(number_of_runs):
         a14_weight_cost = mobilize_duration * B34K_cost * math.ceil(a14_equip_weight / 150000)
     a14_cost = a14_crews * a14_duration * a14_working_hours * a14_hourly_cost + a14_ticket_cost + a14_weight_cost
     a14_stop = a14_start + datetime.timedelta(a14_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-    # CAST-IN-PLACE PIERS 1
+
+    # CAST-IN-PLACE DECK
     a15_working_hours = 8
     a15_quantity = 72656  # SF
     a15_quantity_SFCA = 72656 + 2940 + 98  # SFCA of slab bottom plus edges
@@ -885,10 +881,10 @@ for iter in range(number_of_runs):
         a15_weight_cost = mobilize_duration * B34K_cost * math.ceil(a15_equip_weight / 150000)
     a15_cost = a15_crews * a15_duration * a15_working_hours * a15_hourly_cost + a15_ticket_cost + a15_weight_cost
     a15_stop = a15_start + datetime.timedelta(a15_duration)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
    # Total duration estimation
     work_duration = (a15_stop - a0_start).days
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # Draw schedule
     if iter <= schedules_to_print:
         tw0 = gantt.Task(name='tw0_winter_road',
@@ -1123,9 +1119,9 @@ for iter in range(number_of_runs):
         schedule.make_svg_for_tasks(filename='run ' + str(iter+1) + '.svg',
                                 today=None,
                                 start=datetime.date(2022, 10, 1),
-                                end=datetime.date(2024, 12, 5),
+                                end=datetime.date(2025, 1, 2),
                                 scale=gantt.DRAW_WITH_WEEKLY_SCALE)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # Cost of temporary facilities
     if a6_x == 0:
         max_ppl = max(a1_ppl, a2_ppl, a3_ppl + a4_ppl, a3_ppl + a5_ppl, a3_ppl + a7_ppl, a3_ppl + a8_ppl, a14_ppl + a15_ppl,
@@ -1143,7 +1139,7 @@ for iter in range(number_of_runs):
     total_cost = round((a1_cost + a2_cost + a3_cost + a4_cost + a5_cost + a6_cost + a7_cost + a8_cost + a9_cost +
                         a10_cost + a11_cost + a12_cost + a13_cost + a14_cost + a15_cost + temp_cost + indirect_cost +
                         bonus), 0)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # Data collection
     if data_mode == 1:
         a1_alternative_list.append(a1_x), a1_duration_list.append(a1_duration), a1_cost_list.append(round(a1_cost, 0)), a1_crews_list.append(a1_crews)
@@ -1166,7 +1162,7 @@ for iter in range(number_of_runs):
         tw0_duration_list.append(tw0_duration.days), tw1_duration_list.append(tw1_duration.days), tw3_duration_list.append(tw3_duration.days), tw4_duration_list.append(tw4_duration.days)
         tw0_st_list.append(tw0_start.timetuple().tm_yday), tw0_sp_list.append(tw0_stop.timetuple().tm_yday), tw1_st_list.append(tw1_start.timetuple().tm_yday), tw1_sp_list.append(tw1_stop.timetuple().tm_yday)
         tw3_st_list.append(tw3_start.timetuple().tm_yday), tw3_sp_list.append(tw3_stop.timetuple().tm_yday), tw4_st_list.append(tw4_start.timetuple().tm_yday), tw4_sp_list.append(tw4_stop.timetuple().tm_yday)
-    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
     # REWARD VALUES FOR EACH ALTERNATIVE
     if a1_x == 0: a1_r1 += total_cost/1000000; a1_o1 += 1
     elif a1_x == 1: a1_r2 += total_cost / 1000000; a1_o2 += 1
@@ -1285,7 +1281,7 @@ if data_mode == 1:
     print('Encountered', format(df.shape[0] - df.drop_duplicates(subset=['total_$']).shape[0], ',d'), 'cost duplicates')
     print('and', format(df.shape[0] - df.drop_duplicates().shape[0], ',d'), 'tw duplicates')
     print('Simulation efficiency is', round(100 - 100 / number_of_runs * (df.shape[0] - df.drop_duplicates(subset=['total_$']).shape[0]), 3), '%')
-    df = df.drop_duplicates()#subset=['total_$'])
+    df = df.drop_duplicates(subset=['total_$'])
     print('Duplicates dropped')
     if number_of_runs <= 100:
         print(df.to_string())
